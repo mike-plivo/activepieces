@@ -28,6 +28,7 @@ import { monday } from '@activepieces/piece-monday';
 import { mindee } from '@activepieces/piece-mindee';
 import { openai } from '@activepieces/piece-openai';
 import { pipedrive } from '@activepieces/piece-pipedrive';
+import { plivo } from '@activepieces/piece-plivo';
 import { posthog } from '@activepieces/piece-posthog';
 import { rssFeed } from '@activepieces/piece-rss';
 import { sendgrid } from '@activepieces/piece-sendgrid';
@@ -111,6 +112,7 @@ export const pieces: Piece[] = [
     mindee,
     openai,
     pipedrive,
+    plivo,
     posthog,
     rssFeed,
     sendgrid,

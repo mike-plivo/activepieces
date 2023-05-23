@@ -101,6 +101,7 @@
       "@activepieces/piece-pipedrive": [
         "packages/pieces/pipedrive/src/index.ts"
       ],
+      "@activepieces/piece-plivo": ["packages/pieces/plivo/src/index.ts"],
       "@activepieces/piece-postgres": ["packages/pieces/postgres/src/index.ts"],
       "@activepieces/piece-posthog": ["packages/pieces/posthog/src/index.ts"],
       "@activepieces/piece-pushover": ["packages/pieces/pushover/src/index.ts"],
