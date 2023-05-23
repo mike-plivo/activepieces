@@ -3,6 +3,12 @@ import { ExecutionState } from '@activepieces/shared';
 import { connectionService } from './connections.service';
 import { PiecePropertyMap, PropertyType } from '@activepieces/pieces-framework';
 
+type ResolveParams = {
+  unresolvedInput: unknown
+  executionState: ExecutionState
+  censorConnections: boolean
+}
+
 export class VariableService {
   private VARIABLE_TOKEN = RegExp('\\{\\{(.*?)\\}\\}', 'g');
   private static CONNECTIONS = 'connections';
@@ -99,7 +105,9 @@ export class VariableService {
     return valuesMap;
   }
 
-  resolve(unresolvedInput: any, executionState: ExecutionState, censorConnections = false): Promise<any> {
+  resolve(params: ResolveParams): Promise<any> {
+    const { unresolvedInput, executionState, censorConnections } = params
+
     return this.resolveInternally(
       JSON.parse(JSON.stringify(unresolvedInput)),
       this.getExecutionStateObject(executionState),
@@ -123,7 +131,8 @@ export class VariableService {
 
     for (const [key, value] of Object.entries(resolvedInput)) {
       const property = props[key];
-      if (property?.type === PropertyType.NUMBER) {
+      const type = property?.type;
+      if (type === PropertyType.NUMBER) {
         const castedNumber = this.castedToNumber(clonedInput[key]);
         // If the value is required, we don't allow it to be undefined or null
         if ((isNil(castedNumber) || isNaN(castedNumber)) && property.required) {
@@ -134,7 +143,7 @@ export class VariableService {
           errors[key] = `expected number, but found value: ${value}`;
         }
         clonedInput[key] = castedNumber;
-      } else if (property.type === PropertyType.CUSTOM_AUTH) {
+      } else if (type === PropertyType.CUSTOM_AUTH) {
         const innerValidation = this.validateAndCast(value, property.props);
         clonedInput[key] = innerValidation.result;
         if (Object.keys(innerValidation.errors).length > 0) {

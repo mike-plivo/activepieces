@@ -6,15 +6,29 @@ import {
   UpdateActionRequest,
   UpdateTriggerRequest,
   StepLocationRelativeToParent,
+  MoveActionRequest,
 } from './flow-operations';
 import {
   Action,
   ActionType,
+  BranchAction,
+  LoopOnItemsAction,
 } from './actions/action';
 import { Trigger, TriggerType } from './triggers/trigger';
 import { TypeCompiler } from '@sinclair/typebox/compiler';
 import { FlowVersion, FlowVersionState } from './flow-version';
 import { ActivepiecesError, ErrorCode } from '../common/activepieces-error';
+
+type Step = Action | Trigger
+
+type GetAllSubFlowSteps = {
+  subFlowStartStep: Step
+}
+
+type GetStepFromSubFlow = {
+  subFlowStartStep: Step
+  stepName: string
+}
 
 const actionSchemaValidator = TypeCompiler.Compile(Action);
 const triggerSchemaValidation = TypeCompiler.Compile(Trigger);
@@ -101,12 +115,34 @@ function traverseInternal(step: Trigger | Action | undefined): (Action | Trigger
 function getAllSteps(flowVersion: FlowVersion): (Action | Trigger)[] {
   return traverseInternal(flowVersion.trigger);
 }
+function getAllChildSteps(action: LoopOnItemsAction | BranchAction): (Action)[] {
+  switch(action.type)
+  {
+    case ActionType.LOOP_ON_ITEMS:
+    return traverseInternal(action.firstLoopAction) as Action[];
+    default:
+      return [...traverseInternal(action.onSuccessAction),...traverseInternal(action.onFailureAction)] as Action[];
+  }
+
+}
 
 function getStep(
   flowVersion: FlowVersion,
   stepName: string
 ): Action | Trigger | undefined {
   return getAllSteps(flowVersion).find((step) => step.name === stepName);
+}
+
+const getAllSubFlowSteps = ({ subFlowStartStep }: GetAllSubFlowSteps): Step[] => {
+  return traverseInternal(subFlowStartStep);
+}
+
+const getStepFromSubFlow = ({ subFlowStartStep, stepName }: GetStepFromSubFlow): Step | undefined => {
+  const subFlowSteps = getAllSubFlowSteps({
+    subFlowStartStep,
+  })
+
+  return subFlowSteps.find((step) => step.name === stepName)
 }
 
 function updateAction(
@@ -159,6 +195,29 @@ function extractActions(step: Trigger | Action): { nextAction?: Action, onSucces
   return { nextAction, onSuccessAction, onFailureAction ,firstLoopAction};
 }
 
+function moveAction(flowVersion: FlowVersion, request: MoveActionRequest): void {
+  const steps = getAllSteps(flowVersion);
+  const sourceStep = steps.find(step => step.name === request.name);
+  if (!sourceStep || !isAction(sourceStep?.type)) {
+    throw new ActivepiecesError({
+      code: ErrorCode.FLOW_OPERATION_INVALID,
+      params: {}
+    }, `Source step ${request.name} not found`);
+  }
+  const destinationStep = steps.find(step => step.name === request.newParentStep);
+  if (!destinationStep) {
+    throw new ActivepiecesError({
+      code: ErrorCode.FLOW_OPERATION_INVALID,
+      params: {}
+    }, `Destination step ${request.newParentStep} not found`);
+  }
+  deleteAction(flowVersion, { name: request.name });
+  addAction(flowVersion, {
+    action: sourceStep as Action,
+    parentStep: request.newParentStep,
+    stepLocationRelativeToParent: request.stepLocationRelativeToNewParent
+  });
+}
 
 function addAction(flowVersion: FlowVersion, request: AddActionRequest): void {
   const parentStep = getAllSteps(flowVersion).find(step => step.name === request.parentStep);
@@ -212,8 +271,8 @@ function addAction(flowVersion: FlowVersion, request: AddActionRequest): void {
 }
 
 function createAction(
-  request: UpdateActionRequest,
-  { nextAction, onSuccessAction, onFailureAction, firstLoopAction }: { nextAction?: Action, onSuccessAction?: Action, onFailureAction?: Action, firstLoopAction?: Action },
+  request: Action,
+  { nextAction}: { nextAction?: Action},
 ): Action {
   const baseProperties = {
     displayName: request.displayName,
@@ -226,8 +285,8 @@ function createAction(
     case ActionType.BRANCH:
       action = {
         ...baseProperties,
-        onFailureAction: onFailureAction,
-        onSuccessAction: onSuccessAction,
+        onFailureAction: request.onFailureAction,
+        onSuccessAction:  request.onSuccessAction,
         type: ActionType.BRANCH,
         settings: request.settings,
       };
@@ -235,7 +294,7 @@ function createAction(
     case ActionType.LOOP_ON_ITEMS:
       action = {
         ...baseProperties,
-        firstLoopAction: firstLoopAction,
+        firstLoopAction: request.firstLoopAction,
         type: ActionType.LOOP_ON_ITEMS,
         settings: request.settings,
       };
@@ -265,6 +324,21 @@ function createAction(
   return action;
 }
 
+function isChildOf(parent:LoopOnItemsAction | BranchAction,child:Action)
+{
+  switch(parent.type)
+  {
+    case ActionType.LOOP_ON_ITEMS:{
+      const children = getAllChildSteps(parent);
+      return children.findIndex(c=>c.name === child.name) >-1;}
+    default:{
+      const children = [...getAllChildSteps(parent),...getAllChildSteps(parent)];
+      return children.findIndex(c=>c.name === child.name) >-1;}
+  }
+
+
+
+}
 function createTrigger(
   name: string,
   request: UpdateTriggerRequest,
@@ -313,6 +387,9 @@ export const flowHelper = {
   ): FlowVersion {
     const clonedVersion: FlowVersion = JSON.parse(JSON.stringify(flowVersion));
     switch (operation.type) {
+      case FlowOperationType.MOVE_ACTION:
+        moveAction(clonedVersion, operation.request);
+        break;
       case FlowOperationType.LOCK_FLOW:
         clonedVersion.state = FlowVersionState.LOCKED;
         break;
@@ -335,17 +412,19 @@ export const flowHelper = {
           clonedVersion.trigger.nextAction
         );
         break;
-      default:
-        throw new Error('Unknown operation type');
     }
     clonedVersion.valid = isValid(clonedVersion);
     return clonedVersion;
   },
-  getStep: getStep,
-  isAction: isAction,
-  getAllSteps: getAllSteps,
-  getUsedPieces: getUsedPieces,
   clone: (flowVersion: FlowVersion): FlowVersion => {
     return JSON.parse(JSON.stringify(flowVersion));
   },
+  getStep,
+  isAction,
+  getAllSteps,
+  getUsedPieces,
+  getAllSubFlowSteps,
+  getStepFromSubFlow,
+  isChildOf,
+  getAllChildSteps,
 };
