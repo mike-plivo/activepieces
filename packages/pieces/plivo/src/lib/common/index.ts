@@ -49,6 +49,21 @@ export const plivoCommon = {
     })
 }
 
+export const plivoSampleData = {
+	incomingSms: {
+		"MessageUUID": "8c3920d3-f2ac-481b-a83e-639a69dadd63",
+		"Text": "Hello from Plivo!",
+		"From": "+1234567899",
+		"To": "+1234567890",
+		"Type": "sms",
+		"Units": 1,
+		"TotalRate": "0.005",
+		"TotalAmount": "0.005",
+		"MessageIntent": "optin",
+		"PowerpackUUID": ""
+	}
+};
+
 const describeNumberLabel = (number: any) => {
 	let alias = number.alias || number.phone_number;
 	let features = Array<string>();

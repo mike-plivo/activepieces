@@ -1,5 +1,6 @@
 import { createTrigger, TriggerStrategy } from "@activepieces/pieces-framework";
-import { plivoCommon } from "../common";
+import { HttpRequest, HttpMethod, httpClient } from "@activepieces/pieces-common";
+import { plivoCommon, plivoSampleData } from "../common";
 
 export const plivoNewIncomingSms = createTrigger({
     name: 'new_incoming_sms',
@@ -9,31 +10,28 @@ export const plivoNewIncomingSms = createTrigger({
         authentication: plivoCommon.authentication,
         //phone_number: plivoCommon.phone_number,
     },
-    sampleData: {
-	"MessageUUID": "8c3920d3-f2ac-481b-a83e-639a69dadd63",
-        "Text": "Hello from Plivo!",
-	"From": "+1234567899",
-	"To": "+1234567890",
-	"Type": "sms",
-	"MessageDirection": "inbound",
-	"Units": 1,
-	"TotalRate": "0.005",
-	"TotalAmount": "0.005",
-	"MessageIntent": "optin",
-	"PowerpackUUID": ""
-    },
+    sampleData: plivoSampleData.incomingSms,
     // 
     type: TriggerStrategy.WEBHOOK,
     async onEnable(context) {
-        /*const { phone_number } = context.propsValue;
-        const auth_id = context.propsValue['authentication']['username'];
-        const auth_token = context.propsValue['authentication']['password'];
-        const response = await callPlivoApi<MessagePaginationResponse>(HttpMethod.GET, `Message/?message_direction=inbound&limit=20&to_number=${phone_number}`, { auth_id, auth_token, }, {});
-        await context.store.put<LastMessage>('_new_incoming_sms_trigger', {
-            lastMessageId: response.body.objects.length === 0 ? null : response.body.objects[0].message_uuid,
-        });*/
-        //const webhook = await stripeCommon.subscribeWebhook(context, 'customer.subscription.created', 'customer.subscription.deleted');
+        //const { phone_number } = context.propsValue;
+        //const auth_id = context.propsValue['authentication']['username'];
+        //const auth_token = context.propsValue['authentication']['password'];
 	console.log("New Incoming SMS Trigger Enabled " + context.webhookUrl);
+        const request: HttpRequest = {
+            method: HttpMethod.POST,
+            url: context.webhookUrl,
+            headers: {
+                "Content-Type": "application/json",
+            },
+	    body: plivoSampleData.incomingSms
+        };
+	// TODO response throwing an http response code 400 with code: ENTITY_NOT_FOUND but we can ignore
+	try {
+            await httpClient.sendRequest(request);
+	} catch (error) {
+	    console.log("Ignoring error returned from webhookUrl: " + context.webhookUrl);
+        }	
 	await context.store?.put<PlivoWebhookInformation>('_plivo_new_incoming_sms_url', { webhookUrl: context.webhookUrl });	
     },
     async onDisable(context) {
@@ -46,7 +44,7 @@ export const plivoNewIncomingSms = createTrigger({
 	const message_uuid = context.payload.body.MessageUUID;
 	const message_from = context.payload.body.From;
 	const message_to = context.payload.body.To;
-	console.log("New Incoming SMS Triggered for message_uuid: ${message_uuid} from: ${message_from} to: ${message_to}");
+	console.log(`New Incoming SMS Triggered for message_uuid: ${message_uuid} from: ${message_from} to: ${message_to}`);
 	//const { phone_number } = context.propsValue;
 	// TODO verify signature
 	/*
